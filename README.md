@@ -1,75 +1,108 @@
-# React + TypeScript + Vite
+# Cargo Auctions SPA
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+SPA для работы с грузовыми аукционами: список с фильтрами, детальная карточка,
+история ставок и форма установки собственной ставки. Backend не пишется — все
+эндпоинты замоканы через MSW и реально меняют состояние при мутациях.
 
-Currently, two official plugins are available:
+Стек: React + TypeScript + Vite + TanStack Router + TanStack Query +
+React Hook Form + Zod + MSW + Zustand + Feature-Sliced Design.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Запуск
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```bash
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Открыть `http://localhost:5173`. MSW-воркер стартует автоматически при загрузке
+приложения (см. `src/main.tsx`) — отдельный backend не требуется.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+Другие команды:
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm run build   # tsc -b + vite build — полная проверка типов и продакшн-сборка
+npm run test    # vitest run — юнит-тесты на чистую логику
+npm run preview # предпросмотр production-сборки
+```
+
+## Структура (Feature-Sliced Design)
 
 ```
+src/
+  app/        — точка входа, роутинг (TanStack Router), глобальные стили, layout
+  pages/      — страницы: список / детальная карточка / форма ставки
+  widgets/    — карточка аукциона, список ставок, детальная информация, пагинация
+  features/   — фильтрация (URL sync), установка ставки (RHF+Zod), prefetch по hover
+  entities/   — типы и чистые мапперы: auction, bet, city (мок-справочник)
+  shared/     — API-клиент, конфиг, Zod-схема search params, toast (Zustand), UI-кит
+  mocks/      — MSW: in-memory "БД" (db.ts) + handlers.ts
+```
+
+Все файлы React-компонентов именуются с суффиксом `*.component.tsx` — это явное
+требование задания, соблюдено по всему проекту.
+
+## Схема API
+
+`openapi.auctions.v0.json` в корне репозитория — это **реальная** схема, присланная
+для этого задания (используется как единственный источник правды). Все типы в
+`src/entities/*/model/types.ts` написаны вручную по этой схеме (без codegen — см.
+`AI_USAGE.md` про этот трейд-офф).
+
+> Важная деталь по терминологии схемы: `status` в `AuctionListRequest` — это фильтр по
+> **торговому статусу пользователя** (Leading/Losing/Winner/...), а `statuses` — это
+> фильтр по **статусу самого аукциона**, заданный числовыми кодами 1–8. Это две
+> разные сущности, а не дублирующиеся поля.
+
+## Что реализовано
+
+- **Список аукционов**: загрузка через TanStack Query, пагинация (`page`/`per_page`
+  из реальной схемы), skeleton/empty/error состояния, prefetch детальной карточки по
+  hover/focus, фильтры с Zod-валидацией и синхронизацией в URL search params
+  (безопасные fallback-значения на каждое поле — см. `auctions-search-schema.ts`).
+- **Минимальные фильтры** из задания реализованы с реальными именами полей:
+  `cargo_num`, `status` (торговый статус), `statuses` (статус аукциона, код 1–8),
+  `auc_type`, `load_city`/`unload_city` (мок-словарь городов), диапазон дат погрузки,
+  `is_available`, `is_bidder`, диапазон цены (`current_price_from/to`).
+- **Карточка аукциона**: номер заявки, тип аукциона, статус, торговый статус
+  пользователя, маршрут, даты, груз, текущая цена/цена за км, флаг своей ставки,
+  primary-action кнопка (Сделать/Изменить ставку, Смотреть ставки, disabled) — логика
+  вынесена в чистую функцию `resolvePrimaryAction` с юнит-тестами.
+- **Детальная страница**: организатор, контакты (с учётом
+  `hide_points_address_and_contacts`), маршрут по всем точкам, груз/требования к ТС,
+  условия оплаты, параметры торгов (с учётом `no_view_cargo_price`), состояние своей
+  ставки.
+- **Ставки**: список, количество участников, цена с/без НДС, перевозчик, место,
+  победитель, отменённые ставки с причиной, empty state, состояние при
+  `hide_bets_history`.
+- **Форма ставки** (открывается по прямой ссылке `/auctions/:id/bid`): доступность по
+  `can_set_bet`, React Hook Form + Zod, валидация `price > 0` и по `min/max/step` из
+  детального DTO, подсказка по доступной цене/шагу, мутация с инвалидацией
+  list/detail/bets, MSW реально пересчитывает текущую цену/статус/ранжирование ставок,
+  success/error toast, обработка 422 с подсветкой поля.
+
+## Как я проверял результат
+
+1. `npm run build` — полная проверка типов TypeScript по всему проекту (включая
+   типизацию TanStack Router route tree) + продакшн-сборка Vite. Проходит без ошибок.
+2. `npm run test` — 28 юнит-тестов на чистую логику:
+   - `auctions-search-schema.test.ts` — парсинг/fallback URL search params, включая
+     граничные случаи (некорректный enum, `page=0`, булевы строки `"false"`,
+     некорректная дата, перевод в ISO с таймзоной для API).
+   - `mappers.test.ts` — `resolvePrimaryAction` (все ветки: place/edit/view/disabled,
+     включая приоритет статуса аукциона над остальными флагами) и
+     `toAuctionCardViewModel` (маппинг вложенной структуры в плоский ViewModel).
+   - `bid-schema.test.ts` — фабрика Zod-схемы ставки: `price <= 0`, min/max, шаг от
+     min, коэрсия строки из `<input>`.
+3. Ручной сценарий (через `npm run dev`, при наличии браузера): список → применение
+   фильтра → переход в карточку по prefetch-hover → открытие формы ставки по прямой
+   ссылке → отправка ставки → проверка, что цена/статус в списке и на детальной
+   странице обновились после инвалидации кэша.
+4. Просмотр сгенерированного `dist/` после `build` — сборка укладывается в разумный
+   размер (~430 KB JS до gzip на основной чанк + отдельный чанк MSW-воркера).
+
+## Известные ограничения
+
+Подробный и честный список — в [`AI_USAGE.md`](./AI_USAGE.md): что сокращено
+осознанно (не все фильтры схемы вынесены в UI, ранжирование ставок — упрощённая
+модель, типы синхронизированы со схемой вручную без codegen, нет
+component/e2e-тестов), что бы улучшил при +1 дне работы.
