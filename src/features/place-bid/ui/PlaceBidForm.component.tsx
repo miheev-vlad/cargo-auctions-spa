@@ -26,6 +26,7 @@ export function PlaceBidForm({ auction, onSuccess }: PlaceBidFormProps) {
     min: price.min,
     max: price.max,
     step: price.step,
+    available: price.available,
   });
 
   const {

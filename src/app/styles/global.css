@@ -51,6 +51,11 @@ a {
   font-size: 18px;
 }
 
+.app-card__link {
+  font-weight: 700;
+  font-size: 18px;
+}
+
 .app-content {
   flex: 1;
   padding: 20px;

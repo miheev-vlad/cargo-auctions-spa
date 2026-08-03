@@ -4,6 +4,7 @@ export interface BidConstraints {
   min?: number | null;
   max?: number | null;
   step?: number | null;
+  available?: number | null;
 }
 
 export interface BidFormValues {
@@ -11,7 +12,7 @@ export interface BidFormValues {
 }
 
 export function createBidSchema(constraints: BidConstraints) {
-  const { min, max, step } = constraints;
+  const { min, max, step, available } = constraints;
 
   return z
     .object({
@@ -34,14 +35,14 @@ export function createBidSchema(constraints: BidConstraints) {
           message: `Максимальная цена — ${max}`,
         });
       }
-      if (step != null && step > 0 && min != null) {
-        const diff = values.price - min;
+      if (step != null && step > 0 && available != null) {
+        const diff = values.price - available;
         const remainder = Math.abs(Math.round(diff / step) * step - diff);
         if (remainder > 1e-6) {
           ctx.addIssue({
             code: "custom",
             path: ["price"],
-            message: `Цена должна изменяться шагом ${step} от ${min}`,
+            message: `Цена должна изменяться шагом ${step} от ${available}`,
           });
         }
       }
